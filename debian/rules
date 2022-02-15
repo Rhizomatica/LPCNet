@@ -1,13 +1,17 @@
 #!/usr/bin/make -f
+
 %:
-       dh $@ --buildsystem autoconf --with autoreconf --parallel
+	dh $@ --buildsystem autoconf --with autoreconf --parallel
+
+override_dh_autoreconf:
+	dh_autoreconf debian/autogen.sh
 
 override_dh_auto_configure:
-       dh_auto_configure -- --prefix=/opt/lpcnet
+	dh_auto_configure -- --prefix=/opt/lpcnet
 
 override_dh_auto_install:
-       dh_auto_install
+	dh_auto_install
        # keep our old paths working
-       mkdir -p debian/lpcnet/opt/lpcnet
+	mkdir -p debian/lpcnet/opt/lpcnet
 	ln -sf bin/lpcnet_demo \
 		debian/lpcnet/opt/lpcnet/lpcnet_demo

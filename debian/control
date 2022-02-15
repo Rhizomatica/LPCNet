@@ -13,4 +13,3 @@ Package: lpcnet
 Architecture: any
 Depends: ${shlibs:Depends}, ${misc:Depends}
 Description: LPCNet Audio Encoder
-Llpcnet the machine-learned voice encoder.
