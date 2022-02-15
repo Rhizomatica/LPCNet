@@ -1,5 +1,5 @@
 lpcnet (1.0-1) unstable; urgency=medium
 
-  * Initial release. (Closes: #XXXXXX)
+  * Initial release of LPCNet for HERMES project.
 
- --  <rafael@rhizomatica.org>  Tue, 15 Feb 2022 10:09:22 +0300
+ --  Rafael Diniz <rafael@rhizomatica.org>  Tue, 15 Feb 2022 10:09:22 +0300
