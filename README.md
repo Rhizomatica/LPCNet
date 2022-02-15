@@ -14,6 +14,16 @@ The BSD licensed software is written in C and Python/Keras. For training, a GTX 
 
 This software is an open source starting point for LPCNet/WaveRNN-based speech synthesis and coding.
 
+## Rhizomatica's Debian repository
+
+Package can be installed, for example, in a root shell:
+
+    $ wget http://packages.hermes.radio/hermes/rafael.key
+    $ apt-key add rafael.key
+    $ echo deb  http://packages.hermes.radio/hermes/ bullseye main >> /etc/apt/sources.list
+    $ apt-get update
+    $ apt-get install lpcnet
+
 # Using the existing software
 
 You can build the code using:
