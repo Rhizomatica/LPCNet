@@ -13,5 +13,5 @@ override_dh_auto_install:
 	dh_auto_install
        # keep our old paths working
 	mkdir -p debian/lpcnet/opt/lpcnet
-	ln -sf bin/lpcnet_demo \
-		debian/lpcnet/opt/lpcnet/lpcnet_demo
+	cp .libs/lpcnet_demo \
+		debian/lpcnet/opt/lpcnet
