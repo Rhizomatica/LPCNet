@@ -1,6 +1,6 @@
 #!/usr/bin/make -f
 
-export DEB_CFLAGS_MAINT_APPEND  = -Ofast -g -march=native
+export DEB_CFLAGS_MAINT_APPEND  = -Ofast -mavx2
 
 %:
 	dh $@ --buildsystem autoconf --with autoreconf --parallel
