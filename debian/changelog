@@ -1,3 +1,9 @@
+lpcnet (1.1-1) unstable; urgency=medium
+
+  * New model. Added PLC in upstream.
+
+ --  Rafael Diniz <rafael@rhizomatica.org>  Mon, 10 Oct 2022 17:59:11 +0300
+
 lpcnet (1.0-2) unstable; urgency=medium
 
   * Initial release of LPCNet for HERMES project.
