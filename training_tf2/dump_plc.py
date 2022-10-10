@@ -1,5 +1,6 @@
 #!/usr/bin/python3
-'''Copyright (c) 2017-2018 Mozilla
+'''Copyright (c) 2021-2022 Amazon
+   Copyright (c) 2017-2018 Mozilla
 
    Redistribution and use in source and binary forms, with or without
    modification, are permitted provided that the following conditions
@@ -25,31 +26,19 @@
    SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 '''
 
-import os
-import lpcnet
+import lpcnet_plc
 import sys
 import numpy as np
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras.layers import Layer, GRU, Dense, Conv1D, Embedding
-from ulaw import ulaw2lin, lin2ulaw
-from mdense import MDense
-from diffembed import diff_Embed
-from parameters import get_parameter
 import h5py
 import re
-import argparse
-
-
-# no cuda devices needed
-os.environ['CUDA_VISIBLE_DEVICES'] = ""
 
 # Flag for dumping e2e (differentiable lpc) network weights
 flag_e2e = False
 
-
 max_rnn_neurons = 1
 max_conv_inputs = 1
-max_mdense_tmp = 1
 
 def printVector(f, vector, name, dtype='float', dotp=False):
     if dotp:
@@ -140,12 +129,12 @@ def dump_sparse_gru(self, f, hf):
     hf.write('extern const SparseGRULayer {};\n\n'.format(name));
     return True
 
-def dump_grub(self, f, hf, gru_a_size):
+def dump_gru_layer(self, f, hf):
     global max_rnn_neurons
     name = self.name
     print("printing layer " + name + " of type " + self.__class__.__name__)
     weights = self.get_weights()
-    qweight = printSparseVector(f, weights[0][:gru_a_size, :], name + '_weights', have_diag=False)
+    qweight = printSparseVector(f, weights[0], name + '_weights', have_diag=False)
 
     f.write('#ifdef DOT_PROD\n')
     qweight2 = np.clip(np.round(128.*weights[1]).astype('int'), -128, 127)
@@ -170,9 +159,12 @@ def dump_grub(self, f, hf, gru_a_size):
     neurons = weights[0].shape[1]//3
     max_rnn_neurons = max(max_rnn_neurons, neurons)
     f.write('const GRULayer {} = {{\n   {}_bias,\n   {}_subias,\n   {}_weights,\n   {}_weights_idx,\n   {}_recurrent_weights,\n   {}, {}, ACTIVATION_{}, {}\n}};\n\n'
-            .format(name, name, name, name, name, name, gru_a_size, weights[0].shape[1]//3, activation, reset_after))
+            .format(name, name, name, name, name, name, weights[0].shape[0], weights[0].shape[1]//3, activation, reset_after))
+    hf.write('#define {}_OUT_SIZE {}\n'.format(name.upper(), weights[0].shape[1]//3))
+    hf.write('#define {}_STATE_SIZE {}\n'.format(name.upper(), weights[0].shape[1]//3))
     hf.write('extern const GRULayer {};\n\n'.format(name));
     return True
+GRU.dump_layer = dump_gru_layer
 
 def dump_gru_layer_dummy(self, f, hf):
     name = self.name
@@ -181,7 +173,7 @@ def dump_gru_layer_dummy(self, f, hf):
     hf.write('#define {}_STATE_SIZE {}\n'.format(name.upper(), weights[0].shape[1]//3))
     return True;
 
-GRU.dump_layer = dump_gru_layer_dummy
+#GRU.dump_layer = dump_gru_layer_dummy
 
 def dump_dense_layer_impl(name, weights, bias, activation, f, hf):
     printVector(f, weights, name + '_weights')
@@ -200,23 +192,6 @@ def dump_dense_layer(self, f, hf):
     return False
 
 Dense.dump_layer = dump_dense_layer
-
-def dump_mdense_layer(self, f, hf):
-    global max_mdense_tmp
-    name = self.name
-    print("printing layer " + name + " of type " + self.__class__.__name__)
-    weights = self.get_weights()
-    printVector(f, np.transpose(weights[0], (0, 2, 1)), name + '_weights')
-    printVector(f, np.transpose(weights[1], (1, 0)), name + '_bias')
-    printVector(f, np.transpose(weights[2], (1, 0)), name + '_factor')
-    activation = self.activation.__name__.upper()
-    max_mdense_tmp = max(max_mdense_tmp, weights[0].shape[0]*weights[0].shape[2])
-    f.write('const MDenseLayer {} = {{\n   {}_bias,\n   {}_weights,\n   {}_factor,\n   {}, {}, {}, ACTIVATION_{}\n}};\n\n'
-            .format(name, name, name, name, weights[0].shape[1], weights[0].shape[0], weights[0].shape[2], activation))
-    hf.write('#define {}_OUT_SIZE {}\n'.format(name.upper(), weights[0].shape[0]))
-    hf.write('extern const MDenseLayer {};\n\n'.format(name));
-    return False
-MDense.dump_layer = dump_mdense_layer
 
 def dump_conv1d_layer(self, f, hf):
     global max_conv_inputs
@@ -237,122 +212,54 @@ def dump_conv1d_layer(self, f, hf):
 Conv1D.dump_layer = dump_conv1d_layer
 
 
-def dump_embedding_layer_impl(name, weights, f, hf):
-    printVector(f, weights, name + '_weights')
-    f.write('const EmbeddingLayer {} = {{\n   {}_weights,\n   {}, {}\n}};\n\n'
-            .format(name, name, weights.shape[0], weights.shape[1]))
-    hf.write('#define {}_OUT_SIZE {}\n'.format(name.upper(), weights.shape[1]))
-    hf.write('extern const EmbeddingLayer {};\n\n'.format(name));
 
-def dump_embedding_layer(self, f, hf):
-    name = self.name
-    print("printing layer " + name + " of type " + self.__class__.__name__)
-    weights = self.get_weights()[0]
-    dump_embedding_layer_impl(name, weights, f, hf)
-    return False
-Embedding.dump_layer = dump_embedding_layer
-diff_Embed.dump_layer = dump_embedding_layer
+filename = sys.argv[1]
+with h5py.File(filename, "r") as f:
+    units = min(f['model_weights']['plc_gru1']['plc_gru1']['recurrent_kernel:0'].shape)
+    units2 = min(f['model_weights']['plc_gru2']['plc_gru2']['recurrent_kernel:0'].shape)
+    cond_size = f['model_weights']['plc_dense1']['plc_dense1']['kernel:0'].shape[1]
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument('model_file', type=str, help='model weight h5 file')
-    parser.add_argument('--nnet-header', type=str, help='name of c header file for dumped model', default='nnet_data.h')
-    parser.add_argument('--nnet-source', type=str, help='name of c source file for dumped model', default='nnet_data.c')
-    parser.add_argument('--lpc-gamma', type=float, help='LPC weighting factor. If not specified I will attempt to read it from the model file with 1 as default', default=None)
-    parser.add_argument('--lookahead', type=float, help='Features lookahead. If not specified I will attempt to read it from the model file with 2 as default', default=None)
+model = lpcnet_plc.new_lpcnet_plc_model(rnn_units=units, cond_size=cond_size)
+model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['sparse_categorical_accuracy'])
+#model.summary()
 
-    args = parser.parse_args()
+model.load_weights(filename, by_name=True)
 
-    filename = args.model_file
-    with h5py.File(filename, "r") as f:
-        units = min(f['model_weights']['gru_a']['gru_a']['recurrent_kernel:0'].shape)
-        units2 = min(f['model_weights']['gru_b']['gru_b']['recurrent_kernel:0'].shape)
-        cond_size = min(f['model_weights']['feature_dense1']['feature_dense1']['kernel:0'].shape)
-        e2e = 'rc2lpc' in f['model_weights']
-
-    model, _, _ = lpcnet.new_lpcnet_model(rnn_units1=units, rnn_units2=units2, flag_e2e = e2e, cond_size=cond_size)
-    model.compile(optimizer='adam', loss='sparse_categorical_crossentropy', metrics=['sparse_categorical_accuracy'])
-    #model.summary()
-
-    model.load_weights(filename, by_name=True)
-
-    cfile = args.nnet_source
-    hfile = args.nnet_header
-
-    f = open(cfile, 'w')
-    hf = open(hfile, 'w')
-
-    f.write('/*This file is automatically generated from a Keras model*/\n')
-    f.write('/*based on model {}*/\n\n'.format(sys.argv[1]))
-    f.write('#ifdef HAVE_CONFIG_H\n#include "config.h"\n#endif\n\n#include "nnet.h"\n#include "{}"\n\n'.format(hfile))
-
-    hf.write('/*This file is automatically generated from a Keras model*/\n\n')
-    hf.write('#ifndef RNN_DATA_H\n#define RNN_DATA_H\n\n#include "nnet.h"\n\n')
-
-    if e2e:
-        hf.write('/* This is an end-to-end model */\n')
-        hf.write('#define END2END\n\n')
-    else:
-        hf.write('/* This is *not* an end-to-end model */\n')
-        hf.write('/* #define END2END */\n\n')
-    
-    # LPC weighting factor
-    if type(args.lpc_gamma) == type(None):
-        lpc_gamma = get_parameter(model, 'lpc_gamma', 1)
-    else:
-        lpc_gamma = args.lpc_gamma
-    
-    hf.write('/* LPC weighting factor */\n')
-    hf.write('#define LPC_GAMMA ' + str(lpc_gamma) +'f\n\n')
-
-    # look-ahead
-    if type(args.lookahead) == type(None):
-        lookahead = get_parameter(model, 'lookahead', 2)
-    else:
-        lookahead = args.lookahead
-
-    hf.write('/* Features look-ahead */\n')
-    hf.write('#define FEATURES_DELAY ' + str(lookahead) +'\n\n')
-
-    embed_size = lpcnet.embed_size
-
-    E = model.get_layer('embed_sig').get_weights()[0]
-    W = model.get_layer('gru_a').get_weights()[0][:embed_size,:]
-    dump_embedding_layer_impl('gru_a_embed_sig', np.dot(E, W), f, hf)
-    W = model.get_layer('gru_a').get_weights()[0][embed_size:2*embed_size,:]
-    dump_embedding_layer_impl('gru_a_embed_pred', np.dot(E, W), f, hf)
-    W = model.get_layer('gru_a').get_weights()[0][2*embed_size:3*embed_size,:]
-    dump_embedding_layer_impl('gru_a_embed_exc', np.dot(E, W), f, hf)
-    W = model.get_layer('gru_a').get_weights()[0][3*embed_size:,:]
-    #FIXME: dump only half the biases
-    b = model.get_layer('gru_a').get_weights()[2]
-    dump_dense_layer_impl('gru_a_dense_feature', W, b, 'LINEAR', f, hf)
-
-    W = model.get_layer('gru_b').get_weights()[0][model.rnn_units1:,:]
-    b = model.get_layer('gru_b').get_weights()[2]
-    # Set biases to zero because they'll be included in the GRU input part
-    # (we need regular and SU biases)
-    dump_dense_layer_impl('gru_b_dense_feature', W, 0*b, 'LINEAR', f, hf)
-    dump_grub(model.get_layer('gru_b'), f, hf, model.rnn_units1)
-
-    layer_list = []
-    for i, layer in enumerate(model.layers):
-        if layer.dump_layer(f, hf):
-            layer_list.append(layer.name)
-
-    dump_sparse_gru(model.get_layer('gru_a'), f, hf)
-
-    hf.write('#define MAX_RNN_NEURONS {}\n\n'.format(max_rnn_neurons))
-    hf.write('#define MAX_CONV_INPUTS {}\n\n'.format(max_conv_inputs))
-    hf.write('#define MAX_MDENSE_TMP {}\n\n'.format(max_mdense_tmp))
+if len(sys.argv) > 2:
+    cfile = sys.argv[2];
+    hfile = sys.argv[3];
+else:
+    cfile = 'plc_data.c'
+    hfile = 'plc_data.h'
 
 
-    hf.write('typedef struct {\n')
-    for i, name in enumerate(layer_list):
-        hf.write('  float {}_state[{}_STATE_SIZE];\n'.format(name, name.upper())) 
-    hf.write('} NNetState;\n')
+f = open(cfile, 'w')
+hf = open(hfile, 'w')
 
-    hf.write('\n\n#endif\n')
 
-    f.close()
-    hf.close()
+f.write('/*This file is automatically generated from a Keras model*/\n')
+f.write('/*based on model {}*/\n\n'.format(sys.argv[1]))
+f.write('#ifdef HAVE_CONFIG_H\n#include "config.h"\n#endif\n\n#include "nnet.h"\n#include "{}"\n\n'.format(hfile))
+
+hf.write('/*This file is automatically generated from a Keras model*/\n\n')
+hf.write('#ifndef PLC_DATA_H\n#define PLC_DATA_H\n\n#include "nnet.h"\n\n')
+
+layer_list = []
+for i, layer in enumerate(model.layers):
+    if layer.dump_layer(f, hf):
+        layer_list.append(layer.name)
+
+#dump_sparse_gru(model.get_layer('gru_a'), f, hf)
+
+hf.write('#define PLC_MAX_RNN_NEURONS {}\n\n'.format(max_rnn_neurons))
+#hf.write('#define PLC_MAX_CONV_INPUTS {}\n\n'.format(max_conv_inputs))
+
+hf.write('typedef struct {\n')
+for i, name in enumerate(layer_list):
+    hf.write('  float {}_state[{}_STATE_SIZE];\n'.format(name, name.upper())) 
+hf.write('} PLCNetState;\n')
+
+hf.write('\n\n#endif\n')
+
+f.close()
+hf.close()

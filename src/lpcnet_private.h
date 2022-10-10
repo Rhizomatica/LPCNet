@@ -6,6 +6,7 @@
 #include "freq.h"
 #include "lpcnet.h"
 #include "nnet_data.h"
+#include "plc_data.h"
 #include "kiss99.h"
 
 #define BITS_PER_CHAR 8
@@ -21,12 +22,13 @@
 
 #define FORBIDDEN_INTERP 7
 
-#define FEATURES_DELAY (FEATURE_CONV1_DELAY + FEATURE_CONV2_DELAY)
+#define PLC_MAX_FEC 100
 
 struct LPCNetState {
     NNetState nnet;
     int last_exc;
     float last_sig[LPC_ORDER];
+    float last_features[NB_FEATURES];
 #if FEATURES_DELAY>0
     float old_lpc[FEATURES_DELAY][LPC_ORDER];
 #endif
@@ -63,17 +65,35 @@ struct LPCNetEncState{
   float features[4][NB_TOTAL_FEATURES];
   float sig_mem[LPC_ORDER];
   int exc_mem;
+  float burg_cepstrum[2*NB_BANDS];
 };
 
 #define PLC_BUF_SIZE (FEATURES_DELAY*FRAME_SIZE + TRAINING_OFFSET)
 struct LPCNetPLCState {
   LPCNetState lpcnet;
   LPCNetEncState enc;
+  float fec[PLC_MAX_FEC][NB_FEATURES];
+  int fec_keep_pos;
+  int fec_read_pos;
+  int fec_fill_pos;
+  int fec_active;
   short pcm[PLC_BUF_SIZE+FRAME_SIZE];
   int pcm_fill;
   int skip_analysis;
   int blend;
   float features[NB_TOTAL_FEATURES];
+  int loss_count;
+  PLCNetState plc_net;
+  PLCNetState plc_copy[FEATURES_DELAY+1];
+  int enable_blending;
+  int non_causal;
+  double dc_mem;
+  double syn_dc;
+  int remove_dc;
+
+  short dc_buf[TRAINING_OFFSET];
+  int queued_update;
+  short queued_samples[FRAME_SIZE];
 };
 
 extern float ceps_codebook1[];
