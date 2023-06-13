@@ -75,6 +75,8 @@ LPCNET_EXPORT int lpcnet_decoder_get_size(void);
   */
 LPCNET_EXPORT int lpcnet_decoder_init(LPCNetDecState *st);
 
+LPCNET_EXPORT void lpcnet_reset(LPCNetState *lpcnet);
+
 /** Allocates and initializes a decoder state.
   *  @returns The newly created state
   */
@@ -143,6 +145,15 @@ LPCNET_EXPORT int lpcnet_compute_features(LPCNetEncState *st, const short *pcm, 
   */
 LPCNET_EXPORT int lpcnet_compute_single_frame_features(LPCNetEncState *st, const short *pcm, float features[NB_TOTAL_FEATURES]);
 
+
+/** Compute features on LPCNET_FRAME_SIZE speech samples (currently 160) and output features for one 10-ms frame.
+  * @param [in] st <tt>LPCNetDecState*</tt>: Encoder state
+  * @param [in] pcm <tt>float *</tt>: Input speech to be analyzed
+  * @param [out] features <tt>float[NB_TOTAL_FEATURES]</tt>: Four feature vectors
+  * @retval 0 Success
+  */
+LPCNET_EXPORT int lpcnet_compute_single_frame_features_float(LPCNetEncState *st, const float *pcm, float features[NB_TOTAL_FEATURES]);
+
 /** Gets the size of an <code>LPCNetState</code> structure.
   * @returns The size in bytes.
   */
@@ -186,6 +197,7 @@ LPCNET_EXPORT void lpcnet_synthesize(LPCNetState *st, const float *features, sho
 LPCNET_EXPORT int lpcnet_plc_get_size(void);
 
 LPCNET_EXPORT int lpcnet_plc_init(LPCNetPLCState *st, int options);
+LPCNET_EXPORT void lpcnet_plc_reset(LPCNetPLCState *st);
 
 LPCNET_EXPORT LPCNetPLCState *lpcnet_plc_create(int options);
 
@@ -196,5 +208,10 @@ LPCNET_EXPORT int lpcnet_plc_update(LPCNetPLCState *st, short *pcm);
 LPCNET_EXPORT int lpcnet_plc_conceal(LPCNetPLCState *st, short *pcm);
 
 LPCNET_EXPORT void lpcnet_plc_fec_add(LPCNetPLCState *st, const float *features);
+
+LPCNET_EXPORT void lpcnet_plc_fec_clear(LPCNetPLCState *st);
+
+LPCNET_EXPORT int lpcnet_load_model(LPCNetState *st, const unsigned char *data, int len);
+LPCNET_EXPORT int lpcnet_plc_load_model(LPCNetPLCState *st, const unsigned char *data, int len);
 
 #endif

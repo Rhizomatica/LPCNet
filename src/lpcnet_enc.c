@@ -45,6 +45,7 @@
 #include "lpcnet_private.h"
 #include "lpcnet.h"
 
+#ifndef OPUS_BUILD
 
 #define SURVIVORS 5
 
@@ -52,7 +53,7 @@
 void vq_quantize_mbest(const float *codebook, int nb_entries, const float *x, int ndim, int mbest, float *dist, int *index)
 {
   int i, j;
-  for (i=0;i<mbest;i++) dist[i] = 1e15;
+  for (i=0;i<mbest;i++) dist[i] = 1e15f;
   
   for (i=0;i<nb_entries;i++)
   {
@@ -80,7 +81,7 @@ void vq_quantize_mbest(const float *codebook, int nb_entries, const float *x, in
 int vq_quantize(const float *codebook, int nb_entries, const float *x, int ndim, float *dist_out)
 {
   int i, j;
-  float min_dist = 1e15;
+  float min_dist = 1e15f;
   int nearest = 0;
   
   for (i=0;i<nb_entries;i++)
@@ -242,7 +243,7 @@ int quantize_3stage_mbest(float *x, int entry[3])
 static int find_nearest_multi(const float *codebook, int nb_entries, const float *x, int ndim, float *dist_out, int sign)
 {
   int i, j;
-  float min_dist = 1e15;
+  float min_dist = 1e15f;
   int nearest = 0;
 
   for (i=0;i<nb_entries;i++)
@@ -290,7 +291,7 @@ int quantize_diff(float *x, float *left, float *right, float *codebook, int bits
     float s = 1;
     nb_entries = 1<<bits;
     RNN_COPY(ref, x, NB_BANDS);
-    for (i=0;i<NB_BANDS;i++) pred[i] = pred[NB_BANDS+i] = .5*(left[i] + right[i]);
+    for (i=0;i<NB_BANDS;i++) pred[i] = pred[NB_BANDS+i] = .5f*(left[i] + right[i]);
     for (i=0;i<NB_BANDS;i++) pred[2*NB_BANDS+i] = left[i];
     for (i=0;i<NB_BANDS;i++) pred[3*NB_BANDS+i] = right[i];
     for (i=0;i<4*NB_BANDS;i++) target[i] = x[i%NB_BANDS] - pred[i];
@@ -319,10 +320,10 @@ int quantize_diff(float *x, float *left, float *right, float *codebook, int bits
 int interp_search(const float *x, const float *left, const float *right, float *dist_out)
 {
     int i, k;
-    float min_dist = 1e15;
+    float min_dist = 1e15f;
     int best_pred = 0;
     float pred[4*NB_BANDS];
-    for (i=0;i<NB_BANDS;i++) pred[i] = pred[NB_BANDS+i] = .5*(left[i] + right[i]);
+    for (i=0;i<NB_BANDS;i++) pred[i] = pred[NB_BANDS+i] = .5f*(left[i] + right[i]);
     for (i=0;i<NB_BANDS;i++) pred[2*NB_BANDS+i] = left[i];
     for (i=0;i<NB_BANDS;i++) pred[3*NB_BANDS+i] = right[i];
 
@@ -342,7 +343,7 @@ int interp_search(const float *x, const float *left, const float *right, float *
 void interp_diff(float *x, float *left, float *right, float *codebook, int bits, int sign)
 {
     int i, k;
-    float min_dist = 1e15;
+    float min_dist = 1e15f;
     int best_pred = 0;
     float ref[NB_BANDS];
     float pred[4*NB_BANDS];
@@ -350,7 +351,7 @@ void interp_diff(float *x, float *left, float *right, float *codebook, int bits,
     (void)codebook;
     (void)bits;
     RNN_COPY(ref, x, NB_BANDS);
-    for (i=0;i<NB_BANDS;i++) pred[i] = pred[NB_BANDS+i] = .5*(left[i] + right[i]);
+    for (i=0;i<NB_BANDS;i++) pred[i] = pred[NB_BANDS+i] = .5f*(left[i] + right[i]);
     for (i=0;i<NB_BANDS;i++) pred[2*NB_BANDS+i] = left[i];
     for (i=0;i<NB_BANDS;i++) pred[3*NB_BANDS+i] = right[i];
 
@@ -378,7 +379,7 @@ void interp_diff(float *x, float *left, float *right, float *codebook, int bits,
 int double_interp_search(float features[4][NB_TOTAL_FEATURES], const float *mem) {
     int i, j;
     int best_id=0;
-    float min_dist = 1e15;
+    float min_dist = 1e15f;
     float dist[2][3];
     interp_search(features[0], mem, features[1], dist[0]);
     interp_search(features[2], features[1], features[3], dist[1]);
@@ -410,12 +411,12 @@ void perform_interp_relaxation(float features[4][NB_TOTAL_FEATURES], const float
     id1 = best_id % 3;
     count = 1;
     if (id0 != 1) {
-        float t = (id0==0) ? .5 : 1.;
+        float t = (id0==0) ? .5f : 1.f;
         for (i=0;i<NB_BANDS;i++) features[1][i] += t*features[0][i];
         count += t;
     }
     if (id1 != 2) {
-        float t = (id1==0) ? .5 : 1.;
+        float t = (id1==0) ? .5f : 1.f;
         for (i=0;i<NB_BANDS;i++) features[1][i] += t*features[2][i];
         count += t;
     }
@@ -461,6 +462,7 @@ void bits_pack(packer *bits, unsigned int data, int nb_bits) {
   }
 }
 
+#endif
 
 LPCNET_EXPORT int lpcnet_encoder_get_size() {
   return sizeof(LPCNetEncState);
@@ -490,7 +492,7 @@ static void frame_analysis(LPCNetEncState *st, kiss_fft_cpx *X, float *Ex, const
   RNN_COPY(st->analysis_mem, &in[FRAME_SIZE-OVERLAP_SIZE], OVERLAP_SIZE);
   apply_window(x);
   forward_transform(X, x);
-  compute_band_energy(Ex, X);
+  lpcn_compute_band_energy(Ex, X);
 }
 
 void compute_frame_features(LPCNetEncState *st, const float *in) {
@@ -511,9 +513,9 @@ void compute_frame_features(LPCNetEncState *st, const float *in) {
   follow = -2;
   for (i=0;i<NB_BANDS;i++) {
     Ly[i] = log10(1e-2+Ex[i]);
-    Ly[i] = MAX16(logMax-8, MAX16(follow-2.5, Ly[i]));
+    Ly[i] = MAX16(logMax-8, MAX16(follow-2.5f, Ly[i]));
     logMax = MAX16(logMax, Ly[i]);
-    follow = MAX16(follow-2.5, Ly[i]);
+    follow = MAX16(follow-2.5f, Ly[i]);
     E += Ex[i];
   }
   dct(st->features[st->pcount], Ly);
@@ -529,7 +531,7 @@ void compute_frame_features(LPCNetEncState *st, const float *in) {
       sum += st->lpc[j]*st->pitch_mem[j];
     RNN_MOVE(st->pitch_mem+1, st->pitch_mem, LPC_ORDER-1);
     st->pitch_mem[0] = aligned_in[i];
-    st->exc_buf[PITCH_MAX_PERIOD+i] = sum + .7*st->pitch_filt;
+    st->exc_buf[PITCH_MAX_PERIOD+i] = sum + .7f*st->pitch_filt;
     st->pitch_filt = sum;
     /*printf("%f\n", st->exc_buf[PITCH_MAX_PERIOD+i]);*/
   }
@@ -548,7 +550,7 @@ void compute_frame_features(LPCNetEncState *st, const float *in) {
       /* Upsample correlation by 3x and keep the max. */
       float interpolated[PITCH_MAX_PERIOD]={0};
       /* interp=sinc([-3:3]+1/3).*(.5+.5*cos(pi*[-3:3]/4.5)); interp=interp/sum(interp); */
-      static const float interp[7] = {0.026184, -0.098339, 0.369938, 0.837891, -0.184969, 0.070242, -0.020947};
+      static const float interp[7] = {0.026184f, -0.098339f, 0.369938f, 0.837891f, -0.184969f, 0.070242f, -0.020947f};
       for (i=4;i<PITCH_MAX_PERIOD-4;i++) {
         float val1=0, val2=0;
         int j;
@@ -582,23 +584,25 @@ void process_superframe(LPCNetEncState *st, unsigned char *buf, FILE *ffeat, int
   float sx=0, sxx=0, sxy=0, sy=0, sw=0;
   float frame_corr;
   int voiced;
-  float frame_weight_sum = 1e-15;
+  float frame_weight_sum = 1e-15f;
   float center_pitch;
   int main_pitch;
   int modulation;
+  int corr_id = 0;
+#ifndef OPUS_BUILD
   int c0_id=0;
   int vq_end[3]={0};
   int vq_mid=0;
-  int corr_id = 0;
   int interp_id=0;
+#endif
   for(sub=0;sub<8;sub++) frame_weight_sum += st->frame_weight[2+sub];
   for(sub=0;sub<8;sub++) st->frame_weight[2+sub] *= (8.f/frame_weight_sum);
   for(sub=0;sub<8;sub++) {
-    float max_path_all = -1e15;
+    float max_path_all = -1e15f;
     best_i = 0;
     for (i=0;i<PITCH_MAX_PERIOD-2*PITCH_MIN_PERIOD;i++) {
       float xc_half = MAX16(MAX16(st->xc[2+sub][(PITCH_MAX_PERIOD+i)/2], st->xc[2+sub][(PITCH_MAX_PERIOD+i+2)/2]), st->xc[2+sub][(PITCH_MAX_PERIOD+i-1)/2]);
-      if (st->xc[2+sub][i] < xc_half*1.1) st->xc[2+sub][i] *= .8;
+      if (st->xc[2+sub][i] < xc_half*1.1f) st->xc[2+sub][i] *= .8f;
     }
     for (i=0;i<PITCH_MAX_PERIOD-PITCH_MIN_PERIOD;i++) {
       int j;
@@ -666,8 +670,8 @@ void process_superframe(LPCNetEncState *st, unsigned char *buf, FILE *ffeat, int
   /*best_b = (sxx*sy - sx*sxy)/(sw*sxx - sx*sx);*/
   best_b = (sy - best_a*sx)/sw;
   /* Quantizing the pitch as "main" pitch + slope. */
-  center_pitch = best_b+5.5*best_a;
-  main_pitch = (int)floor(.5 + 21.*log2(center_pitch/PITCH_MIN_PERIOD));
+  center_pitch = best_b+5.5f*best_a;
+  main_pitch = (int)floor(.5 + 21.*1.442695041*log(center_pitch/PITCH_MIN_PERIOD));
   main_pitch = IMAX(0, IMIN(63, main_pitch));
   modulation = (int)floor(.5 + 16*7*best_a/center_pitch);
   modulation = IMAX(-3, IMIN(3, modulation));
@@ -677,30 +681,32 @@ void process_superframe(LPCNetEncState *st, unsigned char *buf, FILE *ffeat, int
   for (sub=0;sub<4;sub++) {
     if (quantize) {
       float p = pow(2.f, main_pitch/21.)*PITCH_MIN_PERIOD;
-      p *= 1 + modulation/16./7.*(2*sub-3);
+      p *= 1.f + modulation/16.f/7.f*(2*sub-3);
       p = MIN16(255, MAX16(33, p));
-      st->features[sub][NB_BANDS] = .02*(p-100);
-      st->features[sub][NB_BANDS + 1] = frame_corr-.5;
+      st->features[sub][NB_BANDS] = .02f*(p-100);
+      st->features[sub][NB_BANDS + 1] = frame_corr-.5f;
     } else {
-      st->features[sub][NB_BANDS] = .01*(IMAX(66, IMIN(510, best[2+2*sub]+best[2+2*sub+1]))-200);
-      st->features[sub][NB_BANDS + 1] = frame_corr-.5;
+      st->features[sub][NB_BANDS] = .01f*(IMAX(66, IMIN(510, best[2+2*sub]+best[2+2*sub+1]))-200);
+      st->features[sub][NB_BANDS + 1] = frame_corr-.5f;
     }
     /*printf("%f %d %f\n", st->features[sub][NB_BANDS], best[2+2*sub], frame_corr);*/
   }
   /*printf("%d %f %f %f\n", best_period, best_a, best_b, best_corr);*/
   RNN_COPY(&st->xc[0][0], &st->xc[8][0], PITCH_MAX_PERIOD);
   RNN_COPY(&st->xc[1][0], &st->xc[9][0], PITCH_MAX_PERIOD);
+#ifndef OPUS_BUILD
   if (quantize) {
     /*printf("%f\n", st->features[3][0]);*/
     c0_id = (int)floor(.5 + st->features[3][0]*4);
     c0_id = IMAX(-64, IMIN(63, c0_id));
-    st->features[3][0] = c0_id/4.;
+    st->features[3][0] = c0_id/4.f;
     quantize_3stage_mbest(&st->features[3][1], vq_end);
     /*perform_interp_relaxation(st->features, st->vq_mem);*/
     quantize_diff(&st->features[1][0], st->vq_mem, &st->features[3][0], ceps_codebook_diff4, 12, 1, &vq_mid);
     interp_id = double_interp_search(st->features, st->vq_mem);
     perform_double_interp(st->features, st->vq_mem, interp_id);
   }
+#endif
   for (sub=0;sub<4;sub++) {
     lpc_from_cepstrum(st->lpc, st->features[sub]);
     for (i=0;i<LPC_ORDER;i++) st->features[sub][NB_BANDS+2+i] = st->lpc[i];
@@ -708,6 +714,7 @@ void process_superframe(LPCNetEncState *st, unsigned char *buf, FILE *ffeat, int
   /*printf("\n");*/
   RNN_COPY(st->vq_mem, &st->features[3][0], NB_BANDS);
   if (encode) {
+#ifndef OPUS_BUILD
     packer bits;
     /*fprintf(stdout, "%d %d %d %d %d %d %d %d %d\n", c0_id+64, main_pitch, voiced ? modulation+4 : 0, corr_id, vq_end[0], vq_end[1], vq_end[2], vq_mid, interp_id);*/
     bits_packer_init(&bits, buf, 8);
@@ -721,6 +728,9 @@ void process_superframe(LPCNetEncState *st, unsigned char *buf, FILE *ffeat, int
     bits_pack(&bits, vq_mid, 13);
     bits_pack(&bits, interp_id, 3);
     if (ffeat) fwrite(buf, 1, 8, ffeat);
+#else
+    (void)buf;
+#endif
   } else if (ffeat) {
     for (i=0;i<4;i++) {
       fwrite(st->features[i], sizeof(float), NB_TOTAL_FEATURES, ffeat);
@@ -736,15 +746,15 @@ void process_multi_frame(LPCNetEncState *st, FILE *ffeat) {
   int best[10];
   int pitch_prev[8][PITCH_MAX_PERIOD];
   float frame_corr;
-  float frame_weight_sum = 1e-15;
+  float frame_weight_sum = 1e-15f;
   for(sub=0;sub<8;sub++) frame_weight_sum += st->frame_weight[2+sub];
   for(sub=0;sub<8;sub++) st->frame_weight[2+sub] *= (8.f/frame_weight_sum);
   for(sub=0;sub<8;sub++) {
-    float max_path_all = -1e15;
+    float max_path_all = -1e15f;
     best_i = 0;
     for (i=0;i<PITCH_MAX_PERIOD-2*PITCH_MIN_PERIOD;i++) {
       float xc_half = MAX16(MAX16(st->xc[2+sub][(PITCH_MAX_PERIOD+i)/2], st->xc[2+sub][(PITCH_MAX_PERIOD+i+2)/2]), st->xc[2+sub][(PITCH_MAX_PERIOD+i-1)/2]);
-      if (st->xc[2+sub][i] < xc_half*1.1) st->xc[2+sub][i] *= .8;
+      if (st->xc[2+sub][i] < xc_half*1.1) st->xc[2+sub][i] *= .8f;
     }
     for (i=0;i<PITCH_MAX_PERIOD-PITCH_MIN_PERIOD;i++) {
       int j;
@@ -781,8 +791,8 @@ void process_multi_frame(LPCNetEncState *st, FILE *ffeat) {
   }
   frame_corr /= 8;
   for (sub=0;sub<4;sub++) {
-    st->features[sub][NB_BANDS] = .01*(IMAX(66, IMIN(510, best[2+2*sub]+best[2+2*sub+1]))-200);
-    st->features[sub][NB_BANDS + 1] = frame_corr-.5;
+    st->features[sub][NB_BANDS] = .01f*(IMAX(66, IMIN(510, best[2+2*sub]+best[2+2*sub+1]))-200);
+    st->features[sub][NB_BANDS + 1] = frame_corr-.5f;
     /*printf("%f %d %f\n", st->features[sub][NB_BANDS], best[2+2*sub], frame_corr);*/
   }
   /*printf("%d %f %f %f\n", best_period, best_a, best_b, best_corr);*/
@@ -804,15 +814,15 @@ void process_single_frame(LPCNetEncState *st, FILE *ffeat) {
   int best[4];
   int pitch_prev[2][PITCH_MAX_PERIOD];
   float frame_corr;
-  float frame_weight_sum = 1e-15;
+  float frame_weight_sum = 1e-15f;
   for(sub=0;sub<2;sub++) frame_weight_sum += st->frame_weight[2+2*st->pcount+sub];
   for(sub=0;sub<2;sub++) st->frame_weight[2+2*st->pcount+sub] *= (2.f/frame_weight_sum);
   for(sub=0;sub<2;sub++) {
-    float max_path_all = -1e15;
+    float max_path_all = -1e15f;
     best_i = 0;
     for (i=0;i<PITCH_MAX_PERIOD-2*PITCH_MIN_PERIOD;i++) {
       float xc_half = MAX16(MAX16(st->xc[2+2*st->pcount+sub][(PITCH_MAX_PERIOD+i)/2], st->xc[2+2*st->pcount+sub][(PITCH_MAX_PERIOD+i+2)/2]), st->xc[2+2*st->pcount+sub][(PITCH_MAX_PERIOD+i-1)/2]);
-      if (st->xc[2+2*st->pcount+sub][i] < xc_half*1.1) st->xc[2+2*st->pcount+sub][i] *= .8;
+      if (st->xc[2+2*st->pcount+sub][i] < xc_half*1.1f) st->xc[2+2*st->pcount+sub][i] *= .8f;
     }
     for (i=0;i<PITCH_MAX_PERIOD-PITCH_MIN_PERIOD;i++) {
       int j;
@@ -848,8 +858,8 @@ void process_single_frame(LPCNetEncState *st, FILE *ffeat) {
     best_i = pitch_prev[sub][best_i];
   }
   frame_corr /= 2;
-  st->features[st->pcount][NB_BANDS] = .01*(IMAX(66, IMIN(510, best[2]+best[3]))-200);
-  st->features[st->pcount][NB_BANDS + 1] = frame_corr-.5;
+  st->features[st->pcount][NB_BANDS] = .01f*(IMAX(66, IMIN(510, best[2]+best[3]))-200);
+  st->features[st->pcount][NB_BANDS + 1] = frame_corr-.5f;
   if (ffeat) {
     fwrite(st->features[st->pcount], sizeof(float), NB_TOTAL_FEATURES, ffeat);
   }
@@ -894,13 +904,26 @@ LPCNET_EXPORT int lpcnet_compute_features(LPCNetEncState *st, const short *pcm, 
   return 0;
 }
 
-int lpcnet_compute_single_frame_features(LPCNetEncState *st, const short *pcm, float features[NB_TOTAL_FEATURES]) {
-  int i;
-  float x[FRAME_SIZE];
-  for (i=0;i<FRAME_SIZE;i++) x[i] = pcm[i];
+static int lpcnet_compute_single_frame_features_impl(LPCNetEncState *st, float *x, float features[NB_TOTAL_FEATURES]) {
   preemphasis(x, &st->mem_preemph, x, PREEMPHASIS, FRAME_SIZE);
   compute_frame_features(st, x);
   process_single_frame(st, NULL);
   RNN_COPY(features, &st->features[0][0], NB_TOTAL_FEATURES);
+  return 0;
+}
+
+int lpcnet_compute_single_frame_features(LPCNetEncState *st, const short *pcm, float features[NB_TOTAL_FEATURES]) {
+  int i;
+  float x[FRAME_SIZE];
+  for (i=0;i<FRAME_SIZE;i++) x[i] = pcm[i];
+  lpcnet_compute_single_frame_features_impl(st, x, features);
+  return 0;
+}
+
+int lpcnet_compute_single_frame_features_float(LPCNetEncState *st, const float *pcm, float features[NB_TOTAL_FEATURES]) {
+  int i;
+  float x[FRAME_SIZE];
+  for (i=0;i<FRAME_SIZE;i++) x[i] = pcm[i];
+  lpcnet_compute_single_frame_features_impl(st, x, features);
   return 0;
 }

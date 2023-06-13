@@ -34,11 +34,55 @@
 #include "lpcnet.h"
 #include "freq.h"
 
+#ifdef USE_WEIGHTS_FILE
+# if __unix__
+#  include <fcntl.h>
+#  include <sys/mman.h>
+#  include <unistd.h>
+#  include <sys/stat.h>
+/* When available, mmap() is preferable to reading the file, as it leads to
+   better resource utilization, especially if multiple processes are using the same
+   file (mapping will be shared in cache). */
+unsigned char *load_blob(const char *filename, int *len) {
+  int fd;
+  unsigned char *data;
+  struct stat st;
+  stat(filename, &st);
+  *len = st.st_size;
+  fd = open(filename, O_RDONLY);
+  data = mmap(NULL, *len, PROT_READ, MAP_SHARED, fd, 0);
+  close(fd);
+  return data;
+}
+void free_blob(unsigned char *blob, int len) {
+  munmap(blob, len);
+}
+# else
+unsigned char *load_blob(const char *filename, int *len) {
+  FILE *file;
+  unsigned char *data;
+  file = fopen(filename, "r");
+  fseek(file, 0L, SEEK_END);
+  *len = ftell(file);
+  fseek(file, 0L, SEEK_SET);
+  if (*len <= 0) return NULL;
+  data = malloc(*len);
+  *len = fread(data, 1, *len, file);
+  return data;
+}
+void free_blob(unsigned char *blob, int len) {
+  free(blob);
+  (void)len;
+}
+# endif
+#endif
+
 #define MODE_ENCODE 0
 #define MODE_DECODE 1
 #define MODE_FEATURES 2
 #define MODE_SYNTHESIS 3
 #define MODE_PLC 4
+#define MODE_ADDLPC 5
 
 void usage(void) {
     fprintf(stderr, "usage: lpcnet_demo -encode <input.pcm> <compressed.lpcnet>\n");
@@ -46,7 +90,8 @@ void usage(void) {
     fprintf(stderr, "       lpcnet_demo -features <input.pcm> <features.f32>\n");
     fprintf(stderr, "       lpcnet_demo -synthesis <features.f32> <output.pcm>\n");
     fprintf(stderr, "       lpcnet_demo -plc <plc_options> <percent> <input.pcm> <output.pcm>\n");
-    fprintf(stderr, "       lpcnet_demo -plc_file <plc_options> <percent> <input.pcm> <output.pcm>\n\n");
+    fprintf(stderr, "       lpcnet_demo -plc_file <plc_options> <percent> <input.pcm> <output.pcm>\n");
+    fprintf(stderr, "       lpcnet_demo -addlpc <features_without_lpc.f32> <features_with_lpc.lpc>\n\n");
     fprintf(stderr, "  plc_options:\n");
     fprintf(stderr, "       causal:       normal (causal) PLC\n");
     fprintf(stderr, "       causal_dc:    normal (causal) PLC with DC offset compensation\n");
@@ -62,6 +107,11 @@ int main(int argc, char **argv) {
     FILE *plc_file = NULL;
     const char *plc_options;
     int plc_flags=-1;
+#ifdef USE_WEIGHTS_FILE
+    int len;
+    unsigned char *data;
+    const char *filename = "weights_blob.bin";
+#endif
     if (argc < 4) usage();
     if (strcmp(argv[1], "-encode") == 0) mode=MODE_ENCODE;
     else if (strcmp(argv[1], "-decode") == 0) mode=MODE_DECODE;
@@ -83,6 +133,8 @@ int main(int argc, char **argv) {
         }
         argv+=2;
         argc-=2;
+    } else if (strcmp(argv[1], "-addlpc") == 0){
+        mode=MODE_ADDLPC;
     } else {
         usage();
     }
@@ -105,7 +157,9 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Can't open %s\n", argv[3]);
         exit(1);
     }
-
+#ifdef USE_WEIGHTS_FILE
+    data = load_blob(filename, &len);
+#endif
     if (mode == MODE_ENCODE) {
         LPCNetEncState *net;
         net = lpcnet_encoder_create();
@@ -148,6 +202,9 @@ int main(int argc, char **argv) {
     } else if (mode == MODE_SYNTHESIS) {
         LPCNetState *net;
         net = lpcnet_create();
+#ifdef USE_WEIGHTS_FILE
+        lpcnet_load_model(net, data, len);
+#endif
         while (1) {
             float in_features[NB_TOTAL_FEATURES];
             float features[NB_FEATURES];
@@ -165,9 +222,12 @@ int main(int argc, char **argv) {
         int count=0;
         int loss=0;
         int skip=0, extra=0;
-        if ((plc_flags&0x3) == LPCNET_PLC_NONCAUSAL) skip=extra=80;
         LPCNetPLCState *net;
+        if ((plc_flags&0x3) == LPCNET_PLC_NONCAUSAL) skip=extra=80;
         net = lpcnet_plc_create(plc_flags);
+#ifdef USE_WEIGHTS_FILE
+        lpcnet_plc_load_model(net, data, len);
+#endif
         while (1) {
             size_t ret;
             ret = fread(pcm, sizeof(pcm[0]), FRAME_SIZE, fin);
@@ -187,10 +247,25 @@ int main(int argc, char **argv) {
           fwrite(pcm, sizeof(pcm[0]), extra, fout);
         }
         lpcnet_plc_destroy(net);
+    } else if (mode == MODE_ADDLPC) {
+        float features[36];
+        size_t ret;
+
+        while (1) {
+            ret = fread(features, sizeof(features[0]), 36, fin);
+            if (ret != 36 || feof(fin)) break;
+            lpc_from_cepstrum(&features[20], &features[0]);
+            fwrite(features, sizeof(features[0]), 36, fout);
+        }
+
     } else {
         fprintf(stderr, "unknown action\n");
     }
     fclose(fin);
     fclose(fout);
+    if (plc_file) fclose(plc_file);
+#ifdef USE_WEIGHTS_FILE
+    free_blob(data, len);
+#endif
     return 0;
 }

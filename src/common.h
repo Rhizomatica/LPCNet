@@ -8,7 +8,9 @@
 #include <math.h>
 
 #define RNN_INLINE inline
+#ifndef OPUS_INLINE
 #define OPUS_INLINE inline
+#endif
 
 float lpc_from_cepstrum(float *lpc, const float *cepstrum);
 
@@ -36,8 +38,8 @@ static RNN_INLINE float ulaw2lin(float u)
 {
     float s;
     float scale_1 = 32768.f/255.f;
-    u = u - 128;
-    s = u >= 0 ? 1 : -1;
+    u = u - 128.f;
+    s = u >= 0.f ? 1.f : -1.f;
     u = fabs(u);
     return s*scale_1*(exp(u/128.*LOG256)-1);
 }
