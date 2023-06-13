@@ -1,6 +1,10 @@
 #!/usr/bin/make -f
 
-export DEB_CFLAGS_MAINT_APPEND  = -Ofast -march=haswell
+ifeq ($(DEB_HOST_ARCH_CPU),amd64)
+	export DEB_CFLAGS_MAINT_APPEND  = -Ofast -march=haswell
+else
+	export DEB_CFLAGS_MAINT_APPEND  = -Ofast -march=native
+endif
 
 %:
 	dh $@ --buildsystem autoconf --with autoreconf --parallel
