@@ -1,3 +1,9 @@
+lpcnet (1.2-2) unstable; urgency=medium
+
+  * Sync to upstream
+
+ --  Rafael Diniz <rafael@rhizomatica.org>  Tue, 06 Feb 2024 10:21:43 +0000
+
 lpcnet (1.2-1) unstable; urgency=medium
 
   * New model. Many improvements.
